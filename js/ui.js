@@ -1,5 +1,5 @@
 import { CATEGORIES, QUESTIONS } from './questions.js';
-import { getOverallProgress, getCategoryProgress, getTestHistory } from './storage.js';
+import { getOverallProgress, getCategoryProgress, getTestHistory, getStreak, getTimeStats, getTotalAnswered, getQuestionStats } from './storage.js';
 
 const LETTERS = ['А', 'Б', 'В', 'Г'];
 
@@ -54,8 +54,16 @@ export function renderHome(container) {
       </div>
     </a>
 
-    <a href="#history" class="mode-card">
+    <a href="#stats" class="mode-card">
       <div class="mode-icon">📊</div>
+      <div class="mode-info">
+        <h3>Статистика</h3>
+        <p>Прогресс, серии, точность и время</p>
+      </div>
+    </a>
+
+    <a href="#history" class="mode-card">
+      <div class="mode-icon">📜</div>
       <div class="mode-info">
         <h3>История</h3>
         <p>Результаты пробных экзаменов</p>
@@ -364,6 +372,200 @@ export function renderTestResult(container, score, state) {
 
     <button class="btn btn-primary" id="start-test-btn" onclick="location.hash='#test'">Попробовать снова</button>
     <button class="btn btn-secondary" onclick="location.hash='#home'">На главную</button>
+  `;
+}
+
+export function renderStats(container) {
+  const progress = getOverallProgress(QUESTIONS);
+  const catProgress = getCategoryProgress(QUESTIONS);
+  const history = getTestHistory();
+  const streak = getStreak();
+  const timeStats = getTimeStats();
+  const totalAnswered = getTotalAnswered();
+  const questionStats = getQuestionStats();
+
+  // Calculate accuracy
+  let totalCorrect = 0, totalAttempts = 0;
+  for (const id in questionStats) {
+    totalCorrect += questionStats[id].correct;
+    totalAttempts += questionStats[id].correct + questionStats[id].wrong;
+  }
+  const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+
+  // Format time
+  const formatMs = (ms) => {
+    if (ms === 0) return '—';
+    const sec = Math.round(ms / 1000);
+    if (sec < 60) return `${sec} сек`;
+    const min = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${min} мин ${s} сек`;
+  };
+
+  const formatTotalTime = (ms) => {
+    if (ms === 0) return '—';
+    const min = Math.round(ms / 60000);
+    if (min < 60) return `${min} мин`;
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return `${h} ч ${m} мин`;
+  };
+
+  // Score history chart (last 10 tests)
+  const recentTests = history.slice(-10);
+  const chartMax = 100;
+  const chartHeight = 120;
+
+  let chartHtml = '';
+  if (recentTests.length > 0) {
+    const barWidth = Math.min(32, Math.floor(280 / recentTests.length));
+    chartHtml = `
+      <div class="card">
+        <div class="stats-card-title">История результатов</div>
+        <div class="chart-container">
+          <div class="chart-line" style="bottom:${(80 / chartMax) * chartHeight}px">
+            <span class="chart-line-label">80%</span>
+          </div>
+          <div class="chart-bars">
+            ${recentTests.map((t, i) => {
+              const h = Math.max(4, (t.percentage / chartMax) * chartHeight);
+              const passed = t.passed;
+              const d = new Date(t.date);
+              const label = `${d.getDate()}/${d.getMonth() + 1}`;
+              return `
+                <div class="chart-bar-wrap" style="width:${barWidth}px">
+                  <div class="chart-bar ${passed ? 'pass' : 'fail'}" style="height:${h}px">
+                    <span class="chart-bar-value">${t.percentage}%</span>
+                  </div>
+                  <span class="chart-bar-label">${label}</span>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>
+        <div style="text-align:center;font-size:0.75rem;color:var(--text-secondary);margin-top:8px">
+          Последние ${recentTests.length} экзамен(ов) | Пунктир — проходной балл 80%
+        </div>
+      </div>`;
+  }
+
+  // Category breakdown
+  const categoryHtml = CATEGORIES.map(cat => {
+    const cp = catProgress[cat.id];
+    if (!cp) return '';
+    const pct = Math.round((cp.mastered / cp.total) * 100);
+    const color = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--error)';
+    return `
+      <div class="stat-category-row">
+        <div class="stat-cat-info">
+          <span>${cat.icon}</span>
+          <span class="stat-cat-name">${cat.name}</span>
+        </div>
+        <div class="stat-cat-right">
+          <div class="stat-cat-bar">
+            <div class="stat-cat-fill" style="width:${pct}%;background:${color}"></div>
+          </div>
+          <span class="stat-cat-pct" style="color:${color}">${pct}%</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Exams passed/failed
+  const passed = history.filter(h => h.passed).length;
+  const failed = history.length - passed;
+  const passRate = history.length > 0 ? Math.round((passed / history.length) * 100) : 0;
+
+  container.innerHTML = `
+    <button class="back-btn" onclick="location.hash='#home'">&larr; Назад</button>
+    <h2 class="section-title">Статистика</h2>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card-icon">🔥</div>
+        <div class="stat-card-value">${streak.current}</div>
+        <div class="stat-card-label">Текущая серия (дн.)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon">🏆</div>
+        <div class="stat-card-value">${streak.best}</div>
+        <div class="stat-card-label">Лучшая серия</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon">🎯</div>
+        <div class="stat-card-value">${accuracy}%</div>
+        <div class="stat-card-label">Точность</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon">📝</div>
+        <div class="stat-card-value">${totalAnswered}</div>
+        <div class="stat-card-label">Ответов всего</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats-card-title">Прогресс изучения</div>
+      <div class="stats-row" style="margin:12px 0">
+        <div class="stat-box">
+          <div class="stat-value">${progress.mastered}</div>
+          <div class="stat-label">Изучено</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${progress.total - progress.mastered}</div>
+          <div class="stat-label">Осталось</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${progress.total}</div>
+          <div class="stat-label">Всего</div>
+        </div>
+      </div>
+      <div class="progress-bar" style="height:10px">
+        <div class="progress-fill success" style="width:${progress.total > 0 ? Math.round((progress.mastered / progress.total) * 100) : 0}%"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats-card-title">Время</div>
+      <div class="stats-row" style="margin:12px 0">
+        <div class="stat-box">
+          <div class="stat-value" style="font-size:1.1rem">${formatMs(timeStats.avg)}</div>
+          <div class="stat-label">Среднее / вопрос</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="font-size:1.1rem">${formatTotalTime(timeStats.total)}</div>
+          <div class="stat-label">Общее время</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${streak.totalDays}</div>
+          <div class="stat-label">Дней занятий</div>
+        </div>
+      </div>
+    </div>
+
+    ${chartHtml}
+
+    ${history.length > 0 ? `
+    <div class="card">
+      <div class="stats-card-title">Экзамены</div>
+      <div class="stats-row" style="margin:12px 0">
+        <div class="stat-box">
+          <div class="stat-value" style="color:var(--success)">${passed}</div>
+          <div class="stat-label">Сдано</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:var(--error)">${failed}</div>
+          <div class="stat-label">Не сдано</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${passRate}%</div>
+          <div class="stat-label">% сдачи</div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card">
+      <div class="stats-card-title">По категориям</div>
+      ${categoryHtml}
+    </div>
   `;
 }
 

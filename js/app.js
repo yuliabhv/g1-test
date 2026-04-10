@@ -1,11 +1,11 @@
 import { QUESTIONS } from './questions.js';
 import { selectTestQuestions, selectPracticeQuestions, calculateScore, shuffleOptions } from './test-engine.js';
-import { saveTestResult, saveQuestionResult } from './storage.js';
+import { saveTestResult, saveQuestionResult, recordStudySession, recordQuestionTime } from './storage.js';
 import {
   renderHome, renderStudy, renderStudyCategory,
   renderPracticeSelect, renderPracticeQuestion, renderPracticeResult,
   renderTestStart, renderTestQuestion, renderTestResult,
-  renderHistory
+  renderHistory, renderStats
 } from './ui.js';
 
 const app = document.getElementById('app');
@@ -17,6 +17,7 @@ const state = {
   answers: [],
   timerRemaining: null,
   timerInterval: null,
+  questionStartTime: null,
 };
 
 function clearTimer() {
@@ -67,6 +68,10 @@ function route() {
       renderHistory(app);
       break;
 
+    case '#stats':
+      renderStats(app);
+      break;
+
     default:
       renderHome(app);
   }
@@ -79,6 +84,7 @@ function startPractice(category) {
   state.currentQuestions = raw.map(q => shuffleOptions(q));
   state.currentIndex = 0;
   state.answers = new Array(state.currentQuestions.length).fill(undefined);
+  recordStudySession();
   showPracticeQuestion();
 }
 
@@ -88,6 +94,7 @@ function showPracticeQuestion() {
     return;
   }
 
+  state.questionStartTime = Date.now();
   renderPracticeQuestion(app, state);
   bindPracticeEvents();
 }
@@ -97,6 +104,10 @@ function bindPracticeEvents() {
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.index);
       state.answers[state.currentIndex] = idx;
+      if (state.questionStartTime) {
+        recordQuestionTime(Date.now() - state.questionStartTime);
+        state.questionStartTime = null;
+      }
       const q = state.currentQuestions[state.currentIndex];
       saveQuestionResult(q.id, idx === q.correct);
       renderPracticeQuestion(app, state);
@@ -127,6 +138,7 @@ function startTest() {
   state.currentIndex = 0;
   state.answers = new Array(40).fill(undefined);
   state.timerRemaining = 24 * 60; // 24 minutes
+  recordStudySession();
 
   state.timerInterval = setInterval(() => {
     if (state.timerRemaining === null) return;

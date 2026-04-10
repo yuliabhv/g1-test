@@ -648,6 +648,181 @@ body {
   font-weight: 700;
 }
 
+/* Stats page */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 16px 12px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.stat-card-icon {
+  font-size: 1.6rem;
+  margin-bottom: 4px;
+}
+
+.stat-card-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.1;
+}
+
+.stat-card-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.stats-card-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.chart-container {
+  position: relative;
+  height: 160px;
+  padding: 20px 0 24px;
+  margin-top: 8px;
+}
+
+.chart-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--border);
+  z-index: 1;
+}
+
+.chart-line-label {
+  position: absolute;
+  right: 0;
+  top: -16px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: var(--card);
+  padding: 0 4px;
+}
+
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 100%;
+  gap: 4px;
+  position: relative;
+  z-index: 2;
+}
+
+.chart-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  max-width: 36px;
+  height: 100%;
+  position: relative;
+}
+
+.chart-bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.chart-bar.pass {
+  background: linear-gradient(180deg, #16a34a, #22c55e);
+}
+
+.chart-bar.fail {
+  background: linear-gradient(180deg, #dc2626, #ef4444);
+}
+
+.chart-bar-value {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.chart-bar-label {
+  position: absolute;
+  bottom: -20px;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+}
+
+.stat-category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-category-row:last-child {
+  border-bottom: none;
+}
+
+.stat-cat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-cat-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-cat-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.stat-cat-bar {
+  width: 70px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stat-cat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.stat-cat-pct {
+  font-size: 0.8rem;
+  font-weight: 700;
+  min-width: 36px;
+  text-align: right;
+}
+
 /* Responsive */
 @media (min-width: 480px) {
   #app {
@@ -2336,6 +2511,79 @@ function getOverallProgress(questions) {
   return { mastered, total: questions.length };
 }
 
+function recordStudySession() {
+  const today = new Date().toISOString().slice(0, 10);
+  const sessions = get('study_sessions') || {};
+  sessions[today] = (sessions[today] || 0) + 1;
+  set('study_sessions', sessions);
+}
+
+function getStudySessions() {
+  return get('study_sessions') || {};
+}
+
+function getStreak() {
+  const sessions = getStudySessions();
+  const sorted = Object.keys(sessions).sort();
+  if (sorted.length === 0) return { current: 0, best: 0, totalDays: 0 };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  let current = 0;
+  let checkDate = sessions[today] ? today : (sessions[yesterday] ? yesterday : null);
+
+  if (checkDate) {
+    let d = new Date(checkDate);
+    while (sessions[d.toISOString().slice(0, 10)]) {
+      current++;
+      d = new Date(d.getTime() - 86400000);
+    }
+  }
+
+  let best = 0, streak = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = new Date(sorted[i - 1]);
+    const curr = new Date(sorted[i]);
+    if (curr - prev === 86400000) {
+      streak++;
+    } else {
+      best = Math.max(best, streak);
+      streak = 1;
+    }
+  }
+  best = Math.max(best, streak);
+
+  return { current, best, totalDays: sorted.length };
+}
+
+function recordQuestionTime(ms) {
+  const times = get('question_times') || [];
+  times.push(ms);
+  if (times.length > 500) times.splice(0, times.length - 500);
+  set('question_times', times);
+}
+
+function getTimeStats() {
+  const times = get('question_times') || [];
+  if (times.length === 0) return { avg: 0, total: 0, count: 0 };
+  const total = times.reduce((a, b) => a + b, 0);
+  return {
+    avg: Math.round(total / times.length),
+    total,
+    count: times.length
+  };
+}
+
+function getTotalAnswered() {
+  const stats = getQuestionStats();
+  let total = 0;
+  for (const id in stats) {
+    total += stats[id].correct + stats[id].wrong;
+  }
+  return total;
+}
+
 function clearAllData() {
   const keys = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -2469,8 +2717,16 @@ function renderHome(container) {
       </div>
     </a>
 
-    <a href="#history" class="mode-card">
+    <a href="#stats" class="mode-card">
       <div class="mode-icon">📊</div>
+      <div class="mode-info">
+        <h3>Статистика</h3>
+        <p>Прогресс, серии, точность и время</p>
+      </div>
+    </a>
+
+    <a href="#history" class="mode-card">
+      <div class="mode-icon">📜</div>
       <div class="mode-info">
         <h3>История</h3>
         <p>Результаты пробных экзаменов</p>
@@ -2782,6 +3038,194 @@ function renderTestResult(container, score, state) {
   `;
 }
 
+function renderStats(container) {
+  const progress = getOverallProgress(QUESTIONS);
+  const catProgress = getCategoryProgress(QUESTIONS);
+  const history = getTestHistory();
+  const streak = getStreak();
+  const timeStats = getTimeStats();
+  const totalAnswered = getTotalAnswered();
+  const questionStats = getQuestionStats();
+
+  let totalCorrect = 0, totalAttempts = 0;
+  for (const id in questionStats) {
+    totalCorrect += questionStats[id].correct;
+    totalAttempts += questionStats[id].correct + questionStats[id].wrong;
+  }
+  const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+
+  const formatMs = (ms) => {
+    if (ms === 0) return '—';
+    const sec = Math.round(ms / 1000);
+    if (sec < 60) return sec + ' сек';
+    const min = Math.floor(sec / 60);
+    const s = sec % 60;
+    return min + ' мин ' + s + ' сек';
+  };
+
+  const formatTotalTime = (ms) => {
+    if (ms === 0) return '—';
+    const min = Math.round(ms / 60000);
+    if (min < 60) return min + ' мин';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return h + ' ч ' + m + ' мин';
+  };
+
+  const recentTests = history.slice(-10);
+  const chartHeight = 120;
+
+  let chartHtml = '';
+  if (recentTests.length > 0) {
+    const barWidth = Math.min(32, Math.floor(280 / recentTests.length));
+    chartHtml = `
+      <div class="card">
+        <div class="stats-card-title">История результатов</div>
+        <div class="chart-container">
+          <div class="chart-line" style="bottom:${(80 / 100) * chartHeight + 24}px">
+            <span class="chart-line-label">80%</span>
+          </div>
+          <div class="chart-bars">
+            ${recentTests.map((t) => {
+              const h = Math.max(4, (t.percentage / 100) * chartHeight);
+              const passed = t.passed;
+              const d = new Date(t.date);
+              const label = `${d.getDate()}/${d.getMonth() + 1}`;
+              return `
+                <div class="chart-bar-wrap" style="width:${barWidth}px">
+                  <div class="chart-bar ${passed ? 'pass' : 'fail'}" style="height:${h}px">
+                    <span class="chart-bar-value">${t.percentage}%</span>
+                  </div>
+                  <span class="chart-bar-label">${label}</span>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>
+        <div style="text-align:center;font-size:0.75rem;color:var(--text-secondary);margin-top:8px">
+          Последние ${recentTests.length} экзамен(ов) | Пунктир — проходной балл 80%
+        </div>
+      </div>`;
+  }
+
+  const categoryHtml = CATEGORIES.map(cat => {
+    const cp = catProgress[cat.id];
+    if (!cp) return '';
+    const pct = Math.round((cp.mastered / cp.total) * 100);
+    const color = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--error)';
+    return `
+      <div class="stat-category-row">
+        <div class="stat-cat-info">
+          <span>${cat.icon}</span>
+          <span class="stat-cat-name">${cat.name}</span>
+        </div>
+        <div class="stat-cat-right">
+          <div class="stat-cat-bar">
+            <div class="stat-cat-fill" style="width:${pct}%;background:${color}"></div>
+          </div>
+          <span class="stat-cat-pct" style="color:${color}">${pct}%</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  const passed = history.filter(h => h.passed).length;
+  const failed = history.length - passed;
+  const passRate = history.length > 0 ? Math.round((passed / history.length) * 100) : 0;
+
+  container.innerHTML = `
+    <button class="back-btn" onclick="location.hash='#home'">&larr; Назад</button>
+    <h2 class="section-title">Статистика</h2>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-card-icon">🔥</div>
+        <div class="stat-card-value">${streak.current}</div>
+        <div class="stat-card-label">Текущая серия (дн.)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon">🏆</div>
+        <div class="stat-card-value">${streak.best}</div>
+        <div class="stat-card-label">Лучшая серия</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon">🎯</div>
+        <div class="stat-card-value">${accuracy}%</div>
+        <div class="stat-card-label">Точность</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-icon">📝</div>
+        <div class="stat-card-value">${totalAnswered}</div>
+        <div class="stat-card-label">Ответов всего</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats-card-title">Прогресс изучения</div>
+      <div class="stats-row" style="margin:12px 0">
+        <div class="stat-box">
+          <div class="stat-value">${progress.mastered}</div>
+          <div class="stat-label">Изучено</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${progress.total - progress.mastered}</div>
+          <div class="stat-label">Осталось</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${progress.total}</div>
+          <div class="stat-label">Всего</div>
+        </div>
+      </div>
+      <div class="progress-bar" style="height:10px">
+        <div class="progress-fill success" style="width:${progress.total > 0 ? Math.round((progress.mastered / progress.total) * 100) : 0}%"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stats-card-title">Время</div>
+      <div class="stats-row" style="margin:12px 0">
+        <div class="stat-box">
+          <div class="stat-value" style="font-size:1.1rem">${formatMs(timeStats.avg)}</div>
+          <div class="stat-label">Среднее / вопрос</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="font-size:1.1rem">${formatTotalTime(timeStats.total)}</div>
+          <div class="stat-label">Общее время</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${streak.totalDays}</div>
+          <div class="stat-label">Дней занятий</div>
+        </div>
+      </div>
+    </div>
+
+    ${chartHtml}
+
+    ${history.length > 0 ? `
+    <div class="card">
+      <div class="stats-card-title">Экзамены</div>
+      <div class="stats-row" style="margin:12px 0">
+        <div class="stat-box">
+          <div class="stat-value" style="color:var(--success)">${passed}</div>
+          <div class="stat-label">Сдано</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" style="color:var(--error)">${failed}</div>
+          <div class="stat-label">Не сдано</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value">${passRate}%</div>
+          <div class="stat-label">% сдачи</div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card">
+      <div class="stats-card-title">По категориям</div>
+      ${categoryHtml}
+    </div>
+  `;
+}
+
 function renderHistory(container) {
   const history = getTestHistory();
 
@@ -2821,6 +3265,7 @@ const state = {
   answers: [],
   timerRemaining: null,
   timerInterval: null,
+  questionStartTime: null,
 };
 
 function clearTimer() {
@@ -2871,6 +3316,10 @@ function route() {
       renderHistory(app);
       break;
 
+    case '#stats':
+      renderStats(app);
+      break;
+
     default:
       renderHome(app);
   }
@@ -2883,6 +3332,7 @@ function startPractice(category) {
   state.currentQuestions = raw.map(q => shuffleOptions(q));
   state.currentIndex = 0;
   state.answers = new Array(state.currentQuestions.length).fill(undefined);
+  recordStudySession();
   showPracticeQuestion();
 }
 
@@ -2892,6 +3342,7 @@ function showPracticeQuestion() {
     return;
   }
 
+  state.questionStartTime = Date.now();
   renderPracticeQuestion(app, state);
   bindPracticeEvents();
 }
@@ -2901,6 +3352,10 @@ function bindPracticeEvents() {
     btn.addEventListener('click', () => {
       const idx = parseInt(btn.dataset.index);
       state.answers[state.currentIndex] = idx;
+      if (state.questionStartTime) {
+        recordQuestionTime(Date.now() - state.questionStartTime);
+        state.questionStartTime = null;
+      }
       const q = state.currentQuestions[state.currentIndex];
       saveQuestionResult(q.id, idx === q.correct);
       renderPracticeQuestion(app, state);
@@ -2931,6 +3386,7 @@ function startTest() {
   state.currentIndex = 0;
   state.answers = new Array(40).fill(undefined);
   state.timerRemaining = 24 * 60; // 24 minutes
+  recordStudySession();
 
   state.timerInterval = setInterval(() => {
     if (state.timerRemaining === null) return;
